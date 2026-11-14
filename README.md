@@ -38,7 +38,7 @@ values ('AUTH-USER-UUID','HOTEL-UUID','staff');
 - **Keine Grenzwertprüfung** und keine rechtliche Validierung. Messintervalle und Pflichtfelder sind mit Betriebsleitung und Hygienevorgaben abzustimmen.
 - Gesamtchlor als vorläufiges Eingabefeld gemäß Papierbogen; noch fachlich bestätigen.
 - `Füllwasser` ist wegen unklarer Bedeutung noch nicht implementiert.
-- Keine PDF-Erzeugung, keine digitale Unterschrift, keine Nachtragskorrektur nach Freigabe, keine Benutzeradministration in der UI.
+- Keine digitale Unterschrift, keine Nachtragskorrektur nach Freigabe, keine Benutzeradministration in der UI.
 - Audit-Tabelle protokolliert Datensatzänderungen; nicht als manipulationssicherer Langzeitnachweis zu betrachten.
 - Protokollstatus ist in dieser Version ein einfacher Workflow; vor Produktion serverseitige Tests, Monitoring, Backups, Aufbewahrung, Datenschutz, Sicherheitsprüfung, Revisions- und Löschkonzept ergänzen.
 - Ein Protokoll wird beim Einreichen derzeit nur auf 16 gespeicherte Messstellen-Einträge geprüft, **nicht** auf alle betrieblichen Pflichtangaben.
@@ -48,3 +48,13 @@ values ('AUTH-USER-UUID','HOTEL-UUID','staff');
 ## Datensicherheit
 
 Die Datenbank-RLS isoliert Hotelmandanten. Die clientseitige Rollenanzeige ist **nicht** die Sicherheitsgrenze; SQL-Policies und `transition_day_log` prüfen Zugriffe. Für einen Produktivbetrieb müssen die SQL-Policies und die RPC-Funktion unabhängig auditiert und mit Mehrmandanten-Tests geprüft werden.
+
+## Neu in Version 0.2: PDF-Betriebstagebuch
+
+- Für freigegebene (`approved`) Tagesprotokolle erscheint unter **Abschluss** die Schaltfläche **PDF-Betriebstagebuch herunterladen**.
+- Die Anwendung lädt beim Export die Daten frisch aus Supabase und erzeugt das PDF lokal im Browser; kein zusätzlicher Serverdienst und keine Datenübertragung an einen PDF-Anbieter.
+- Enthalten sind alle Morgen-/Abendmessungen, manuell erfasste dinotec-/Photometerwerte, Tagesdaten, Kontrollkästchen, Bemerkungen, Datum und Benutzer-ID.
+- **Wichtig:** Das PDF ist eine Momentaufnahme, keine signierte oder manipulationssicher archivierte Urkunde. Die Freigabe wird durch den Datenbankstatus angezeigt, nicht kryptografisch nachgewiesen.
+- Nach dem Hochladen der neuen Dateien auf GitHub baut Vercel die Version neu. Es sind **keine neuen Supabase-Tabellen oder Schlüssel** nötig.
+- `npm install` installiert zusätzlich `jspdf`.
+- Prüfe den Export mit einem freigegebenen Testtag und vergleiche alle Werte mit PoolLog.

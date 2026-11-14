@@ -1,6 +1,6 @@
 'use client';
 import {useCallback,useEffect,useState} from 'react';
-import {Waves,ClipboardCheck,FlaskConical,Monitor,LogOut,Save,CheckCircle2,ArrowRight,ShieldCheck} from 'lucide-react';
+import {Waves,ClipboardCheck,FlaskConical,Monitor,LogOut,Save,CheckCircle2,ArrowRight,ShieldCheck,FileDown} from 'lucide-react';
 import {supabase} from '../lib/supabase';
 import {points,emptyReading,checks,cleaning,vacuum,type Reading} from '../lib/config';
 import type {User} from '@supabase/supabase-js';
@@ -29,11 +29,23 @@ export default function Home(){
  async function saveReading(){if(!db||!day||!editable)return;const needed:(keyof Reading)[]=selected.auto?['auto_cl','auto_redox','auto_ph','manual_cl','manual_total_cl','manual_ph']:['manual_cl','manual_total_cl','manual_ph'];if(!needed.every(k=>ok(value[k]))){setNotice('Bitte alle Messwerte dieses Bereichs korrekt eingeben.');return}if(numberFields.some(k=>value[k]&&!ok(value[k]))){setNotice('Ungültiger Zahlenwert.');return}setBusy(true);const values=Object.fromEntries(numberFields.map(k=>[k,parse(value[k])]));const {error}=await db.from('readings').upsert({day_log_id:day.id,round,point_id:selected.id,values,note:value.note},{onConflict:'day_log_id,round,point_id'});setBusy(false);if(error)setNotice(error.message);else{setNotice('Messwerte gespeichert.');if(point<7)setPoint(point+1);await refresh(user!,dayDate)}}
  async function saveData(){if(!db||!day||!editable)return;setBusy(true);const {error}=await db.from('day_logs').update({data}).eq('id',day.id);setBusy(false);setNotice(error?error.message:'Tagesdaten gespeichert.');if(!error)await refresh(user!,dayDate)}
  async function transition(action:'submit'|'approve'|'return'){if(!db||!day||!user)return;if(action==='return'&&!reviewNote.trim()){setNotice('Bitte einen Korrekturgrund angeben.');return}setBusy(true);const {error}=await db.rpc('transition_day_log',{p_log_id:day.id,p_action:action,p_note:reviewNote});setBusy(false);setNotice(error?error.message:'Status geändert.');if(!error)await refresh(user,dayDate)}
+ async function exportPdf(){if(!db||!day||!user||day.status!=='approved')return;setBusy(true);setNotice('');try{
+   const profile=await db.from('profiles').select('hotel_id').eq('id',user.id).single();if(profile.error)throw profile.error;
+   const hotel=await db.from('hotels').select('name').eq('id',profile.data.hotel_id).single();if(hotel.error)throw hotel.error;
+   // Re-fetch the approved record and readings to avoid exporting unsaved local drafts.
+   const record=await db.from('day_logs').select('*').eq('id',day.id).single();if(record.error)throw record.error;
+   if(record.data.status!=='approved')throw new Error('Das Tagesprotokoll ist nicht freigegeben.');
+   const entries=await db.from('readings').select('round,point_id,values,note').eq('day_log_id',day.id);if(entries.error)throw entries.error;
+   const pdfReadings=Object.fromEntries((entries.data||[]).map((r:any)=>[key(r.round,r.point_id),{...Object.fromEntries(Object.entries(r.values||{}).map(([k,v])=>[k,v===null?'':String(v)])),note:r.note||''}]));
+   const {downloadDayPdf}=await import('../lib/pdf');
+   downloadDayPdf(record.data,pdfReadings,record.data.data||{},hotel.data.name);
+   setNotice('PDF wurde erstellt.');
+  }catch(e:any){setNotice(e.message||'PDF-Erstellung fehlgeschlagen.')}finally{setBusy(false)}}
  const setD=(k:string,v:any)=>setData(old=>({...old,[k]:v}));
  if(!db)return <main className="center"><div className="panel"><h1>🌊 PoolLog</h1><p>Projekt noch nicht mit Supabase verbunden.</p><p>Trage die Zugangsdaten in <code>.env.local</code> ein und starte den Entwicklungsserver neu. Siehe README.md.</p></div></main>;
  if(!user)return <main className="center"><div className="panel login"><h1>🌊 PoolLog</h1><p>Digitales Betriebstagebuch · Anmeldung</p><label>E-Mail<input type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Passwort<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy||!email||!password} onClick={login}>Anmelden</button><p className="muted">Konten werden durch die Administration angelegt.</p>{notice&&<p role="status">{notice}</p>}</div></main>;
  return <main className="shell"><header><div className="brand"><Waves/><div><strong>PoolLog</strong><small>Digitales Betriebstagebuch</small></div></div><div className="account"><span>{user.email} · {role}</span><button className="quiet" onClick={()=>db.auth.signOut()}><LogOut size={17}/> Abmelden</button></div></header>
- <section className="hero"><div><span className="eyebrow">VICTOR’S BÄDERWELT · V0.1</span><h1>Tagesprotokoll</h1><p>Manuelle Messungen, Betriebskontrollen und Freigabe an einem Ort.</p></div><label>Datum<input type="date" value={dayDate} onChange={e=>setDayDate(e.target.value)}/></label></section>
+ <section className="hero"><div><span className="eyebrow">VICTOR’S BÄDERWELT · V0.2</span><h1>Tagesprotokoll</h1><p>Manuelle Messungen, Betriebskontrollen und Freigabe an einem Ort.</p></div><label>Datum<input type="date" value={dayDate} onChange={e=>setDayDate(e.target.value)}/></label></section>
  {notice&&<div className="notice" role="status">{notice}<button className="quiet" onClick={()=>setNotice('')}>×</button></div>}
  {!day?<div className="panel"><h2>Für diesen Tag liegt noch kein Protokoll vor.</h2><p>Lege das Tagesprotokoll an, um mit der Erfassung zu beginnen.</p><button disabled={busy||!['staff','admin'].includes(role)} onClick={createDay}>Tagesprotokoll anlegen</button></div>:<>
  <div className="stats"><div className="stat"><b>{day.status==='draft'?'In Bearbeitung':day.status==='submitted'?'Zur Prüfung':day.status==='returned'?'Korrektur nötig':'Freigegeben'}</b><small>Protokollstatus</small></div><div className="stat"><b>{points.filter(p=>readings[key('Morgen',p.id)]).length}/8</b><small>Morgenrunde</small></div><div className="stat"><b>{points.filter(p=>readings[key('Abend',p.id)]).length}/8</b><small>Abendrunde</small></div><div className="stat"><b>4</b><small>Filterkreisläufe</small></div></div>
@@ -47,8 +59,8 @@ export default function Home(){
  {tab==='abschluss'?<section className="panel formpanel"><h2>Abschluss & Freigabe</h2><p>Verantwortlicher Benutzer: <strong>{day.responsible_user_id===user.id?'Du':day.responsible_user_id}</strong></p><p>Aktueller Status: <strong>{day.status}</strong></p><div className="summary"><p>Morgenrunde: {points.filter(p=>readings[key('Morgen',p.id)]).length} / 8</p><p>Abendrunde: {points.filter(p=>readings[key('Abend',p.id)]).length} / 8</p></div>
  {editable?<button disabled={busy||points.some(p=>!readings[key('Morgen',p.id)]||!readings[key('Abend',p.id)])} onClick={()=>transition('submit')}>Zur Prüfung einreichen <ArrowRight size={17}/></button>:null}
  {day.status==='submitted'&&['manager','admin'].includes(role)&&day.responsible_user_id!==user.id?<><label>Prüfvermerk / Korrekturgrund<textarea value={reviewNote} onChange={e=>setReviewNote(e.target.value)}/></label><div className="actions"><button className="secondary" disabled={busy||!reviewNote.trim()} onClick={()=>transition('return')}>Zur Korrektur zurückgeben</button><button disabled={busy} onClick={()=>transition('approve')}>Freigeben <CheckCircle2 size={17}/></button></div></>:null}
- {day.status==='approved'&&<p className="success">✓ Freigegeben. Änderungen sind nur über einen gesonderten, noch zu implementierenden Berichtigungsprozess möglich.</p>}{day.status==='returned'&&day.review_note&&<p className="notice">Rückgabegrund: {day.review_note}</p>}
- <p className="muted">Die Freigabe wird serverseitig auf Berechtigungen geprüft. Weitere Vollständigkeitsregeln, Prüfprotokoll und PDF-Export folgen in einer späteren Version.</p></section>:null}
+ {day.status==='approved'&&<button disabled={busy} onClick={exportPdf}><FileDown size={17}/> PDF-Betriebstagebuch herunterladen</button>}{day.status==='approved'&&<p className="success">✓ Freigegeben. Änderungen sind nur über einen gesonderten, noch zu implementierenden Berichtigungsprozess möglich.</p>}{day.status==='returned'&&day.review_note&&<p className="notice">Rückgabegrund: {day.review_note}</p>}
+ <p className="muted">Die Freigabe wird serverseitig auf Berechtigungen geprüft. Weitere Vollständigkeitsregeln und ein erweitertes Prüfprotokoll folgen in einer späteren Version.</p></section>:null}
  </>}
- <footer>PoolLog 0.1 · Manuelle Erfassung · Keine Verbindung zur Schwimmbadtechnik · Entwicklungsstand</footer></main>
+ <footer>PoolLog 0.2 · Manuelle Erfassung · Keine Verbindung zur Schwimmbadtechnik · Entwicklungsstand</footer></main>
 }
