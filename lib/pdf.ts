@@ -7,7 +7,7 @@ const safe=(v:unknown)=>v===null||v===undefined||v===''?'–':String(v);
 const key=(round:string,id:string)=>`${round}|${id}`;
 const displayDate=(date:string)=>date.split('-').reverse().join('.');
 
-export function downloadDayPdf(day:ExportDay,readings:Record<string,Reading>,data:Record<string,any>,hotelName:string,audit:Audit[]=[]){
+export function downloadDayPdf(day:ExportDay,readings:Record<string,Partial<Reading>>,data:Record<string,any>,hotelName:string,audit:Audit[]=[]){
  if(day.status!=='approved')throw new Error('PDF-Export ist nur für freigegebene Tage verfügbar.');
  const doc=new jsPDF({unit:'mm',format:'a4'});
  const margin=14, width=182, bottom=278;
